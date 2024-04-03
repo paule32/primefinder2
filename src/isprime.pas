@@ -7,7 +7,7 @@
 // ----------------------------------------------------------------
 {$ifdef FPC}
   {$macro on}
-  {$mode delphi}
+  {$mode delphi}{$H+}
 {$endif}
 {$APPTYPE CONSOLE}
 program isprime;
@@ -28,6 +28,7 @@ uses
     Drivers,    // Hotkey
     Views,      // events (cmQuit)
     Menus,      // TMenuBar, TStatusBar
+    MsgBox,     // message boxes
     Dialogs,    // modal views
     Video,      // con video settings
     Keyboard,   // con keyboard settings
@@ -54,12 +55,40 @@ var
   ini_color: Boolean =  true;  // def. con in color mode?
   ini_debug: Boolean = false;  // def. debug mode
   
-  ini_name : String;           // the name of the .ini file
+  ini_name : AnsiString;       // the name of the .ini file
   ini_file : TextFile;         // ini file handle
+
+// ----------------------------------------------------------------
+// records, that is used to get, and set the values for the prime
+// dialog fields ...
+// ----------------------------------------------------------------
+type
+  TParameterData = record
+    startPrime: String[250];
+    endPrime  : String[250];
+    indexPrime: Char;
+    forceStart: Char;
+  end;
 
 // ----------------------------------------------------------------
 // the object class for the prime application ...
 // ----------------------------------------------------------------
+type
+  {$ifdef FPC}
+  PPrimeDialog = ^TPrimeDialog;
+  TPrimeDialog = object(TDialog)
+  {$else}
+  TPrimeDialog = class(TDialog)
+  {$endif}
+  private
+    PrimeData: TParameterData;
+    procedure doStopAndSave;
+    procedure doStopAndLoad;
+  public
+    constructor Init;
+    procedure HandleEvent(var Event: TEvent); virtual;
+  end;
+
 type
   {$ifdef FPC}
   TPrimeApp = object(TApplication)
@@ -67,7 +96,7 @@ type
   TPrimeApp = class (TApplication)
   {$endif}
   private
-    procedure doPrimeDialog;
+    primeDialog: TPrimeDialog;
     procedure doAbout;
   public
     constructor Init;
@@ -80,9 +109,14 @@ type
 // application command ID's ...
 // ----------------------------------------------------------------
 const
-  cmdAbout       = 1002;  // help event requested
-  cmdPrimeDialog = 1003;  // main primer :)
-
+  cmAbout        = 1002;  // help event requested
+  cmPrimeDialog  = 1003;  // main primer :)
+  
+  cmCancelSearch = 1004;
+  
+  cmStopAndLoad  = 1005;
+  cmStopAndSave  = 1006;
+  
 // ----------------------------------------------------------------
 // internal global used variables ...
 // ----------------------------------------------------------------  
@@ -93,9 +127,9 @@ var
   ErrorRes  : Byte;       // if any error, set this flag
   
 var
-  vm        : TVideoMode;
-  app_name  :      PChar; // paramstr(0) for CreateProcess
-  number    :     String;
+  vm        : TVideoMode; // fine tuning the tui application
+  app_name  : AnsiString; // name of the application (.ini)
+  number    : AnsiString;
 
 // ----------------------------------------------------------------
 // @brief ctor - construct a text user interface (tui) application.
@@ -106,52 +140,90 @@ begin
   inherited init;
 end;
 
-procedure TPrimeApp.doPrimeDialog;
+// ----------------------------------------------------------------
+// @brief stop the prime calculation and save current found values.
+// ----------------------------------------------------------------
+procedure TPrimeDialog.doStopAndSave;
+begin
+  GetData(PrimeData);
+  MsgBox.MessageBox(PrimeData.startPrime, nil, mfInformation + mfOkButton);
+  MsgBox.MessageBox(PrimeData.endPrime, nil, mfInformation + mfOkButton);
+  
+  if PrimeData.indexPrime = chr(1) then
+  MsgBox.MessageBox('index true' , nil, mfInformation + mfOkButton) else
+  MsgBox.MessageBox('index false', nil, mfInformation + mfOkButton) ;
+  
+  if PrimeData.forceStart = chr(1) then
+  MsgBox.MessageBox('start true' , nil, mfInformation + mfOkButton) else
+  MsgBox.MessageBox('start false', nil, mfInformation + mfOkButton) ;
+
+end;
+
+// ----------------------------------------------------------------
+// @brief stop the prime calculation and load current found values.
+// ----------------------------------------------------------------
+procedure TPrimeDialog.doStopAndLoad;
+begin
+  MsgBox.MessageBox('lodser', nil, mfInformation + mfOkButton);
+end;
+
+procedure TPrimeDialog.HandleEvent(var Event: TEvent);
+begin
+  inherited HandleEvent(Event);
+  case Event.What of
+    evCommand: begin
+      case Event.Command of
+        cmStopAndSave: begin doStopAndSave; ClearEvent(Event); end;
+        cmStopAndLoad: begin doStopAndLoad; ClearEvent(Event); end;
+      end;
+    end;
+  end;
+end;
+
+constructor TPrimeDialog.Init;
 var
-  dlg: PDialog;
   R: Objects.TRect;
-  line_start, line_end: PView;
+  line_start, line_end, cindex, cforce: PView;
 begin
   R.Assign(0,0,72,16);
   R.Move(4,3);
+  inherited Init(R, 'Prime finder Dialog');
   
-  dlg := New(PDialog, Init(R, 'Prime finder Dialog'));
-  with dlg^ do begin
-    // text 1
-    R.Assign(2,1, 43,2);
-    Insert(New(PStaticText, Init(R, 'Start Prime:')));
-    
-    // text 2
-    R.Assign(2,4, 43,5);
-    Insert(New(PStaticText, Init(R, 'End Prime:')));
-    
-    // input line: prime start
-    R.Assign(2,2, 64,3);
-    line_start := New(PInputLine,Init(R,1024));
-    insert(line_start);
-    
-    // input line: prime end
-    R.Assign(2,5, 64,6);
-    line_end := New(PInputLine,Init(R,1024));
-    insert(line_end);
+  // text 1
+  R.Assign(2,1, 43,2); Insert(New(PStaticText, Init(R, 'Start Prime:')));
+  R.Assign(2,4, 43,5); Insert(New(PStaticText, Init(R, 'End Prime:')));
 
-    
-    // text: index
-    R.Assign(2, 9,  42,10); Insert(New(PStaticText, Init(R, 'Index:')));
-    R.Assign(2,10,  42,11); Insert(New(PStaticText, Init(R, 'Prime:')));
-    
-    // text: prime
-    R.Assign(10, 9, 42,10); Insert(New(PStaticText, Init(R, '1')));
-    R.Assign(10,10, 42,11); Insert(New(PStaticText, Init(R, '2')));
-    
-    // button: cancel
-    R.Assign(2,13, 24,15);
-    Insert(New(PButton, Init(R, '~C~ancel Search', cmOK, bfDefault)));
-  end;
+  // input line: prime start
+  R.Assign(2,2, 64, 3);  line_start := New(PInputLine,Init(R, 250)); insert(line_start);
+  R.Assign(2,5, 64, 6);  line_end   := New(PInputLine,Init(R, 250)); insert(line_end);
+
+  // checkbox: parameter
+  R.Assign( 2,7, 23, 8); Insert(New(PStaticText, Init(R, 'Parameter 1:')));
+  R.Assign(26,7, 47, 8); Insert(New(PStaticText, Init(R, 'Parameter 2:')));
+
+  R.Assign( 2,8, 23, 9); cindex := New(PCheckBoxes, Init(R, NewSItem('~o~nly one check', nil)));
+  R.Assign(26,8, 45, 9); cforce := New(PCheckBoxes, Init(R, NewSItem('~f~orce start'   , nil)));
+  //
+  Insert(cindex);
+  Insert(cforce);
   
-  if ValidView(dlg) <> nil then begin
-    desktop^.insert(dlg);
-  end;
+  // button: start
+  R.Assign(48,8, 69,10); Insert(New(PButton, Init(R, 'S T A R T', cmStopAndSave, bfNormal)));
+
+  // text: index
+  R.Assign(2,10, 42,11); Insert(New(PStaticText, Init(R, 'Index:')));
+  R.Assign(2,11, 42,12); Insert(New(PStaticText, Init(R, 'Prime:')));
+
+  // text: prime
+  R.Assign(10,10, 42,11); Insert(New(PStaticText, Init(R, '1')));
+  R.Assign(10,11, 42,12); Insert(New(PStaticText, Init(R, '2')));
+
+  // buttons
+  R.Assign( 2,13, 24,15); Insert(New(PButton, Init(R, '~C~ancel Search', cmCancelSearch, bfDefault)));
+  R.Assign(26,13, 46,15); Insert(New(PButton, Init(R, '~L~oad Data'    , cmStopAndLoad , bfNormal )));
+  R.Assign(48,13, 69,15); Insert(New(PButton, Init(R, '~S~top and saves', cmStopAndSave, bfNormal )));
+  
+  desktop^.ExecView(@self);
 end;
 
 // ----------------------------------------------------------------
@@ -208,11 +280,10 @@ begin
   
   if Event.What = evCommand then begin
     case Event.Command of
-      cmdAbout: begin
-        doAbout;
-      end;
-      cmdPrimeDialog: begin
-        doPrimeDialog;
+      cmAbout: begin doAbout; end;
+      cmPrimeDialog: begin
+        primeDialog.Init;
+        //desktop^.insert(primeDialog);
       end;
       else begin
         exit;
@@ -229,19 +300,19 @@ procedure TPrimeApp.InitMenuBar;
 var
   R: Objects.TRect;
   M: PMenu;
-  M0_0, M1_0, M2_0,
-  M0_1, M1_1, M2_1,
-  M0_2, M1_2, M2_2, SM0, SM1: PMenuItem;
+  M0_0, M1_0,
+  M0_1, M1_1,
+  M0_2, M1_2, SM0, SM1: PMenuItem;
 begin
   GetExtent(R);
   R.B.Y := R.A.Y + 1;
   
-  m1_2 := NewItem('~A~bout ...', 'F1', kbF1, cmdAbout, hcNoContext, nil);
+  m1_2 := NewItem('~A~bout ...', 'F1', kbF1, cmAbout, hcNoContext, nil);
   M1_1 := NewLine(M1_2);
   m1_0 := NewItem('~S~ervice', 'F5', kbF5, 1003, hcNoContext, M1_1);
   SM1  := NewSubMenu('~H~elp', hcNoContext, NewMenu(M1_0), nil);
   
-  M0_2 := NewItem('~P~rime Dialog', 'F2', kbF2, cmdPrimeDialog, hcNoContext, nil);
+  M0_2 := NewItem('~P~rime Dialog', 'F2', kbF2, cmPrimeDialog, hcNoContext, nil);
   M0_1 := NewLine(M0_2);
   m0_0 := NewItem('E~x~it', 'Alt + X', kbAltX, cmQuit, hcNoContext, M0_1);
   SM0  := NewSubMenu('~A~pplication', hcNoContext, NewMenu(M0_0), SM1);
