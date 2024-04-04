@@ -6,10 +6,10 @@
 // commercial use not allowed !
 // ----------------------------------------------------------------
 {$ifdef FPC}
-  {$macro on}
-  {$mode delphi}{$H+}
+  {$macro on}           // set macro processing: on
+  {$mode delphi}{$H+}   // support delphi syntax when using fpc
 {$endif}
-{$APPTYPE CONSOLE}
+{$APPTYPE CONSOLE}      // sign application for the console
 program isprime;
 
 // ----------------------------------------------------------------
@@ -17,12 +17,20 @@ program isprime;
 // ----------------------------------------------------------------
 uses
   {$ifdef FPC}
+// ----------------------------------------------------------------
+// function signatures und *nix systems.
+// NOTE: currently only MS-Windows 10 64-Bit Pro, and FPC 3.2.2 is
+//       testet. There is no support of other operating system, yet
+// ----------------------------------------------------------------
     {$IFDEF UNIX}
       {$IFDEF UseCThreads}
       cthreads,
       {$ENDIF}  // UseCThreads
       Unix,
     {$ENDIF}    // UNIX
+// ----------------------------------------------------------------
+// text user interface stuff for the (Windows) 32-Bit Console ...
+// ----------------------------------------------------------------
     App,        // TApplication
     Objects,    // window range (TRect)
     Drivers,    // Hotkey
@@ -33,17 +41,24 @@ uses
     Video,      // con video settings
     Keyboard,   // con keyboard settings
   {$endif}      // FPC
+// ----------------------------------------------------------------
+// win32api stuff, used by the text user interface (tui) under the
+// Microsoft Windows 10 32/64-Bit command line interface (cli) ...
+// ----------------------------------------------------------------
   {$ifdef WINDOWS}
   Windows,
   {$endif}      // WINDOWS
+// ----------------------------------------------------------------
+// common used classes that are used under FPC, and Delphi ...
+// ----------------------------------------------------------------
   SysUtils, Classes, IniFiles, Int128;
 
 // ----------------------------------------------------------------
 // @brief global used variables and constants ...
 // ----------------------------------------------------------------
 const
-  EXIT_SUCCESS = 0;
-  EXIT_FAILURE = 1;
+  EXIT_SUCCESS = 0;     // application exit code without errors
+  EXIT_FAILURE = 1;     // ... with errors
 
 // ----------------------------------------------------------------
 // .ini file setting varaubles ...
@@ -59,29 +74,12 @@ var
   ini_file : TextFile;         // ini file handle
 
 // ----------------------------------------------------------------
-// records, that is used to get, and set the values for the prime
-// dialog fields ...
+// the object classes for the prime application ...
 // ----------------------------------------------------------------
 type
-  TParameterData = record
-    startPrime: String[250];
-    endPrime  : String[250];
-    indexPrime: Char;
-    forceStart: Char;
-  end;
-
-// ----------------------------------------------------------------
-// the object class for the prime application ...
-// ----------------------------------------------------------------
-type
-  {$ifdef FPC}
   PPrimeDialog = ^TPrimeDialog;
   TPrimeDialog = object(TDialog)
-  {$else}
-  TPrimeDialog = class(TDialog)
-  {$endif}
   private
-    PrimeData: TParameterData;
     procedure doStopAndSave;
     procedure doStopAndLoad;
   public
@@ -89,14 +87,42 @@ type
     procedure HandleEvent(var Event: TEvent); virtual;
   end;
 
+// ----------------------------------------------------------------
+// @brief object to handle check boxes ...
+// ----------------------------------------------------------------
 type
-  {$ifdef FPC}
-  TPrimeApp = object(TApplication)
-  {$else}
-  TPrimeApp = class (TApplication)
-  {$endif}
+  PPrimeCheckBox = ^TPrimeCheckBox;
+  TPrimeCheckBox = object(TCheckBoxes)
+  public
+    constructor Init(R: Objects.TRect; item: String);
+    procedure HandleEvent(var Event: TEvent); virtual;
+  end;
+
+// ----------------------------------------------------------------
+// @brief object to handle data input line ...
+// ----------------------------------------------------------------
+type
+  PPrimeInputLine = ^TPrimeInputLine;
+  TPrimeInputLine = object(TInputLine)
   private
-    primeDialog: TPrimeDialog;
+    internal_id: Integer;
+  public
+    constructor Init(R: Objects.TRect; len: Word);
+    procedure HandleEvent(var Event: TEvent); virtual;
+  end;
+  PPrimeInputLineCount = ^TPrimeInputLineCount;
+  TPrimeInputLineCount = object(TStaticText)
+  public
+    constructor Init(R: Objects.TRect);
+    procedure HandleEvent(var Event: TEvent); virtual;
+  end;
+
+// ----------------------------------------------------------------
+// @brief object structure for the core application TUI view ...
+// ----------------------------------------------------------------
+type
+  TPrimeApp = object(TApplication)
+  private
     procedure doAbout;
   public
     constructor Init;
@@ -106,6 +132,39 @@ type
   end;
 
 // ----------------------------------------------------------------
+// object, that is used to get, and set the values for the prime
+// dialog fields ...
+// ----------------------------------------------------------------
+type
+  PPrimeSuperObject = ^TPrimeSuperObject;
+  TPrimeSuperObject = object
+  public
+    PrimeDialog: TPrimeDialog;
+    
+    line_start : PPrimeInputLine;
+    line_end   : PPrimeInputLine;
+    
+    indexPrime : PPrimeCheckBox;
+    forceStart : PPrimeCheckBox;
+    
+    labl_start : PPrimeInputLineCount;
+    labl_end   : PPrimeInputLineCount;
+    
+    internal_input_counter : Integer;
+    
+    cont_start : Integer;
+    cont_end   : Integer;
+    
+    fond_index : PStaticText;
+    fond_prime : PStaticText;
+  end;
+
+// ----------------------------------------------------------------
+// global forwarded members for later use ...
+// ----------------------------------------------------------------
+function check_prime(nst: String): Boolean; forward;
+
+// ----------------------------------------------------------------
 // application command ID's ...
 // ----------------------------------------------------------------
 const
@@ -113,9 +172,10 @@ const
   cmPrimeDialog  = 1003;  // main primer :)
   
   cmCancelSearch = 1004;
+  cmStarteSearch = 1005;
   
-  cmStopAndLoad  = 1005;
-  cmStopAndSave  = 1006;
+  cmStopAndLoad  = 1006;
+  cmStopAndSave  = 1007;
   
 // ----------------------------------------------------------------
 // internal global used variables ...
@@ -124,7 +184,8 @@ var
   PrimeApp  : TPrimeApp;  // Turbo Vision like application
   PrimeIni  : TIniFile;   // support for application .ini settings
   
-  ErrorRes  : Byte;       // if any error, set this flag
+  PrimeObject : TPrimeSuperObject;
+  ErrorRes    : Byte;     // if any error, set this flag
   
 var
   vm        : TVideoMode; // fine tuning the tui application
@@ -132,12 +193,118 @@ var
   number    : AnsiString;
 
 // ----------------------------------------------------------------
-// @brief ctor - construct a text user interface (tui) application.
+// @brief ctor - construct a TCheckBox
 // ----------------------------------------------------------------
 {$ifdef FPC}
-constructor TPrimeApp.Init;
+constructor TPrimeCheckBox.Init(R: Objects.TRect; item: String);
 begin
-  inherited init;
+  inherited Init(R, NewSItem(item, nil));
+end;
+
+// ----------------------------------------------------------------
+// @brief handle events in the running tui application.
+//        waits for keyboard or mouse interaction from the user.
+// ----------------------------------------------------------------
+procedure TPrimeCheckBox.HandleEvent(var Event: TEvent);
+begin
+  inherited HandleEvent(Event);
+  
+  if Event.What = evCommand then begin
+  end;
+end;
+
+// ----------------------------------------------------------------
+// @brief ctor - construct a TInputLine
+// ----------------------------------------------------------------
+constructor TPrimeInputLineCount.Init(R: Objects.TRect);
+begin
+  inherited Init(R, '   0 / 250');
+  
+  PrimeObject.cont_start := 1;
+  PrimeObject.cont_end   := 1;
+end;
+
+procedure TPrimeInputLineCount.HandleEvent(var Event: TEvent);
+begin
+  inherited HandleEvent(Event);
+end;
+
+constructor TPrimeInputLine.Init(R: Objects.TRect; len: Word);
+begin
+  inherited Init(R, len);
+  internal_id :=
+  PrimeObject.internal_input_counter;
+  inc(PrimeObject.internal_input_counter);
+end;
+// ----------------------------------------------------------------
+// @brief handle events in the running tui application.
+//        waits for keyboard or mouse interaction from the user.
+// ----------------------------------------------------------------
+procedure TPrimeInputLine.HandleEvent(var Event: TEvent);
+var
+  fmt: String;
+begin
+  fmt := '%4d / 250';
+  if (Event.What = evKeyDown) then begin
+    if event.keycode = kbBack then begin
+      if internal_id = 1 then begin
+        dec(PrimeObject.cont_start);
+        if PrimeObject.cont_start < 1   then
+          PrimeObject.cont_start := 1;  Delete(
+          
+        PrimeObject.line_start^.data^,  Length(
+        PrimeObject.line_start^.data^), 1);
+          
+        PrimeObject.labl_start^.Text^ := Format(fmt, [
+        PrimeObject.cont_start-1]);
+        PrimeObject.labl_start.draw;
+      end else
+      if internal_id = 2 then begin
+        dec(PrimeObject.cont_end);
+        if PrimeObject.cont_end < 1   then
+          PrimeObject.cont_end := 1;  Delete(
+          
+        PrimeObject.line_end^.data^,  Length(
+        PrimeObject.line_end^.data^), 1);
+          
+        PrimeObject.labl_end^.Text^ := Format(fmt, [
+        PrimeObject.cont_end-1]);
+        PrimeObject.labl_end.draw;
+      end;
+    end else
+    if ((event.charcode >= '0') and (event.charcode <= '9')) then begin
+      if internal_id = 1 then begin
+        if PrimeObject.cont_start >= 250 then begin
+          PrimeObject.cont_start := 250;
+          ClearEvent(event);
+          exit;
+        end else
+        if Length(PrimeObject.labl_start^.Text^) < 250 then begin
+          PrimeObject.labl_start^.Text^ := Format(fmt, [
+          Length(PrimeObject.line_start^.data^)+1]);
+          PrimeObject.labl_start.draw;
+          inc(PrimeObject.cont_start);
+        end;
+      end else
+      if internal_id = 2 then begin
+        if PrimeObject.cont_end >= 250 then begin
+          PrimeObject.cont_end := 250;
+          ClearEvent(event);
+          exit;
+        end else
+        if Length(PrimeObject.labl_end^.Text^) < 251 then begin
+          PrimeObject.labl_end^.Text^ := Format(fmt, [
+          Length(PrimeObject.line_end^.data^)+1]);
+          PrimeObject.labl_end.draw;
+          inc(PrimeObject.cont_end);
+        end;
+      end;
+    end else begin
+      ClearEvent(event);
+      exit;
+    end;
+  end;
+  inherited HandleEvent(Event);
 end;
 
 // ----------------------------------------------------------------
@@ -145,18 +312,16 @@ end;
 // ----------------------------------------------------------------
 procedure TPrimeDialog.doStopAndSave;
 begin
-  GetData(PrimeData);
-  MsgBox.MessageBox(PrimeData.startPrime, nil, mfInformation + mfOkButton);
-  MsgBox.MessageBox(PrimeData.endPrime, nil, mfInformation + mfOkButton);
+  MsgBox.MessageBox(PrimeObject.line_start^.data^, nil, mfInformation + mfOkButton);
+  MsgBox.MessageBox(PrimeObject.line_end  ^.data^, nil, mfInformation + mfOkButton);
   
-  if PrimeData.indexPrime = chr(1) then
+  if PrimeObject.indexPrime^.Value = 1 then
   MsgBox.MessageBox('index true' , nil, mfInformation + mfOkButton) else
   MsgBox.MessageBox('index false', nil, mfInformation + mfOkButton) ;
   
-  if PrimeData.forceStart = chr(1) then
+  if PrimeObject.forceStart^.Value = 1 then
   MsgBox.MessageBox('start true' , nil, mfInformation + mfOkButton) else
   MsgBox.MessageBox('start false', nil, mfInformation + mfOkButton) ;
-
 end;
 
 // ----------------------------------------------------------------
@@ -173,8 +338,13 @@ begin
   case Event.What of
     evCommand: begin
       case Event.Command of
-        cmStopAndSave: begin doStopAndSave; ClearEvent(Event); end;
-        cmStopAndLoad: begin doStopAndLoad; ClearEvent(Event); end;
+        // lets rumbble :-()
+        cmStarteSearch: begin
+          check_prime(PrimeObject.line_start^.data^);
+          ClearEvent(Event);
+        end;
+        cmStopAndSave : begin doStopAndSave; ClearEvent(Event); end;
+        cmStopAndLoad : begin doStopAndLoad; ClearEvent(Event); end;
       end;
     end;
   end;
@@ -183,7 +353,6 @@ end;
 constructor TPrimeDialog.Init;
 var
   R: Objects.TRect;
-  line_start, line_end, cindex, cforce: PView;
 begin
   R.Assign(0,0,72,16);
   R.Move(4,3);
@@ -194,29 +363,41 @@ begin
   R.Assign(2,4, 43,5); Insert(New(PStaticText, Init(R, 'End Prime:')));
 
   // input line: prime start
-  R.Assign(2,2, 64, 3);  line_start := New(PInputLine,Init(R, 250)); insert(line_start);
-  R.Assign(2,5, 64, 6);  line_end   := New(PInputLine,Init(R, 250)); insert(line_end);
+  R.Assign(2,2, 55, 3);  PrimeObject.line_start := New(PPrimeInputLine, Init(R, 250));
+  R.Assign(2,5, 55, 6);  PrimeObject.line_end   := New(PPrimeInputLine, Init(R, 250));
+  //
+  insert(PrimeObject.line_start);
+  insert(PrimeObject.line_end  );
+  //
+  R.Assign(58,2, 72, 3); PrimeObject.labl_start := New(PPrimeInputLineCount, Init(R));
+  R.Assign(58,5, 72, 6); PrimeObject.labl_end   := New(PPrimeInputLineCount, Init(R));
+  //
+  insert(PrimeObject.labl_start);
+  insert(PrimeObject.labl_end  );
 
   // checkbox: parameter
   R.Assign( 2,7, 23, 8); Insert(New(PStaticText, Init(R, 'Parameter 1:')));
   R.Assign(26,7, 47, 8); Insert(New(PStaticText, Init(R, 'Parameter 2:')));
 
-  R.Assign( 2,8, 23, 9); cindex := New(PCheckBoxes, Init(R, NewSItem('~o~nly one check', nil)));
-  R.Assign(26,8, 45, 9); cforce := New(PCheckBoxes, Init(R, NewSItem('~f~orce start'   , nil)));
+  R.Assign( 2,8, 23, 9); PrimeObject.indexPrime := New(PPrimeCheckBox, Init(R, '~o~nly one check' ));
+  R.Assign(26,8, 45, 9); PrimeObject.forceStart := New(PPrimeCheckBox, Init(R, '~f~orce start'    ));
   //
-  Insert(cindex);
-  Insert(cforce);
+  Insert(PrimeObject.indexPrime);
+  Insert(PrimeObject.forceStart);
   
   // button: start
-  R.Assign(48,8, 69,10); Insert(New(PButton, Init(R, 'S T A R T', cmStopAndSave, bfNormal)));
+  R.Assign(48,8, 69,10); Insert(New(PButton, Init(R, 'S T A R T', cmStarteSearch, bfNormal)));
 
   // text: index
   R.Assign(2,10, 42,11); Insert(New(PStaticText, Init(R, 'Index:')));
   R.Assign(2,11, 42,12); Insert(New(PStaticText, Init(R, 'Prime:')));
 
   // text: prime
-  R.Assign(10,10, 42,11); Insert(New(PStaticText, Init(R, '1')));
-  R.Assign(10,11, 42,12); Insert(New(PStaticText, Init(R, '2')));
+  R.Assign(10,10, 42,11); PrimeObject.fond_index := New(PStaticText, Init(R, ' '));
+  R.Assign(10,11, 42,12); PrimeObject.fond_prime := New(PStaticText, Init(R, ' '));
+  //
+  insert(PrimeObject.fond_index);
+  insert(PrimeObject.fond_prime);
 
   // buttons
   R.Assign( 2,13, 24,15); Insert(New(PButton, Init(R, '~C~ancel Search', cmCancelSearch, bfDefault)));
@@ -224,6 +405,14 @@ begin
   R.Assign(48,13, 69,15); Insert(New(PButton, Init(R, '~S~top and saves', cmStopAndSave, bfNormal )));
   
   desktop^.ExecView(@self);
+end;
+
+// ----------------------------------------------------------------
+// @brief ctor - construct a text user interface (tui) application.
+// ----------------------------------------------------------------
+constructor TPrimeApp.Init;
+begin
+  inherited init;
 end;
 
 // ----------------------------------------------------------------
@@ -282,7 +471,7 @@ begin
     case Event.Command of
       cmAbout: begin doAbout; end;
       cmPrimeDialog: begin
-        primeDialog.Init;
+        PrimeObject.primeDialog.Init;
         //desktop^.insert(primeDialog);
       end;
       else begin
@@ -428,15 +617,44 @@ begin
   if (Pos('-', nst, 1) > 0) or (Pos('+', nst, 1) > 0)
   or (Pos('*', nst, 1) > 0) or (Pos('/', nst, 1) > 0)
   or (Pos('%', nst, 1) > 0) or (Pos('$', nst, 1) > 0) or (Length(nst) < 1) then begin
-    WriteLn('the input value is not valid.');
-    Halt(1);
+    MsgBox.MessageBox('the input value is not valid.', nil,
+    mfError + mfOkButton);
+    exit;
   end;
 
-  if nst = '0' then begin WriteLn('0: is not prime'); result := false; exit; end else
-  if nst = '1' then begin WriteLn('1: is not prime'); result := false; exit; end else
-  
-  if nst = '2' then begin WriteLn('Index(1) for 2: is a prime.'); result := false; exit; end else
-  if nst = '3' then begin WriteLn('Index(2) for 3: is a prime.'); result := false; exit; end;
+  // -------------------------------------------------------------
+  // pre-filter "not" primes ...
+  // -------------------------------------------------------------
+  if nst = '0' then begin
+    MsgBox.MessageBox('0: is not prime', nil,
+    mfError + mfOkButton);
+    result := false;
+    exit;
+  end else
+  if nst = '1' then begin
+    MsgBox.MessageBox('1: is not prime', nil,
+    mfError + mfOkButton);
+    result := false;
+    exit;
+  end else
+  if nst = '2' then begin
+    PrimeObject.fond_index.Text^ := '1';
+    PrimeObject.fond_index.draw;
+    
+    PrimeObject.fond_prime.Text^ := '2';
+    PrimeObject.fond_prime.draw;
+    result := true;
+    exit;
+  end else
+  if nst = '3' then begin
+    PrimeObject.fond_index.Text^ := '2';
+    PrimeObject.fond_index.draw;
+    
+    PrimeObject.fond_prime.Text^ := '3';
+    PrimeObject.fond_prime.draw;
+    result := true;
+    exit;
+  end;
   
   // -------------------------------------------------------------
   // check if prime have twins, if so, then it is not a prime.
@@ -446,8 +664,10 @@ begin
     result := true;
     for b := StrToInt('0') to StrToInt('9') do begin
       if result = false then begin
-        WriteLn(Format('%s: is no prime, it has twins.',[nst]));
-        Halt(1);
+        MsgBox.MessageBox(Format('%s: is no prime, it has twins.',[nst]),
+        nil, mfError + mfOkButton);
+        result := false;
+        exit;
       end else
       if check_dummy(nst, b) then result := false;
     end;
@@ -461,8 +681,12 @@ begin
     len := 1;
     if nst = '23' then begin
       if Pos('23', nst, Length(nst) - len) = 0 then begin
+        PrimeObject.fond_index.Text^ := '9'; // todo !
+        PrimeObject.fond_index.draw;
+
+        PrimeObject.fond_prime.Text^ := '23';
+        PrimeObject.fond_prime.draw;
         result := true;
-        WriteLn('Index(9) is prime: 23');
         exit;
       end else
       if Pos('23', nst, Length(nst) - len) > 0 then begin
@@ -470,7 +694,8 @@ begin
           if len = 0 then exit;
           len := len - 2;
           if Pos('23', nst, Length(nst) - len) = 0 then begin
-            WriteLn(nst + ': is not prime (23. twins)');
+            MsgBox.MessageBox('number is not prime (23. twins) !',
+            nil, mfError + mfOkButton);
             exit;
           end;
         end;
@@ -504,16 +729,24 @@ begin
     even := 1;
     while j <= suche do begin
       m := ((even mod i));
-      if ini_debug then begin
-        WriteLn(Format('--> idx: %s  m: %s  j: %s', [
-        Int128ToStr(index), Int128ToStr(m), Int128ToStr(j) ]));
-      end;
+      //if ini_debug then begin
+      //  WriteLn(Format('--> idx: %s  m: %s  j: %s', [
+      //  Int128ToStr(index), Int128ToStr(m), Int128ToStr(j) ]));
+      //end;
       if m = 0 then begin
         index := index + 1;
         prime  := j;
         if j >= suche then begin
-          WriteLn(Format('Index(%s) for: %s is a prime.', [
-          Int128ToStr(index + 1), nst ]));
+          PrimeObject.fond_index.Text^ := Int128ToStr(index + 1);
+          PrimeObject.fond_index.draw;
+
+          PrimeObject.fond_prime.Text^ := 'okay.';
+          PrimeObject.fond_prime.draw;
+
+          MsgBox.MessageBox(#3 + 'SUCCESS' +
+          #13#3 + 'end of calculation.',
+          nil, mfInformation + mfOkButton);
+          
           result := true;
           break;
         end;
@@ -521,7 +754,16 @@ begin
         lastIndex := index;
         lastPrime := prime;
         if j >= suche then begin
-          WriteLn(Format('no Index for: %s is not prime.', [nst]));
+          PrimeObject.fond_index.Text^ := ' ';
+          PrimeObject.fond_index.draw;
+
+          PrimeObject.fond_prime.Text^ := 'no prime';
+          PrimeObject.fond_prime.draw;
+
+          MsgBox.MessageBox(#3 + 'FAILED' +
+          #13#3 + 'end of calculation.',
+          nil, mfInformation + mfOkButton);
+          
           result := false;
           break;
         end;
@@ -582,9 +824,10 @@ begin
       ini_debug := primeIni.ReadBool   ('common', 'debug', false);
       
       Randomize;
-      {$ifdef FPC}
       InitVideo;
       InitKeyboard;
+      
+      PrimeObject.internal_input_counter := 1;
         
       // -----------------------------------------------------------
       // this values can be override by .ini file setttings ...
@@ -606,7 +849,6 @@ begin
       PrimeApp.Init;  PrimeApp.doAbout;
       PrimeApp.Run;
       PrimeApp.Done;
-      {$endif}
   
       // -------------------------------------------------------------
       // print a nice banner on the screen. Please be so fair and hold
