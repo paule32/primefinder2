@@ -729,6 +729,10 @@ begin
     even := 1;
     while j <= suche do begin
       m := ((even mod i));
+      
+      PrimeObject.fond_index.Text^ := Int128ToStr(index);
+      PrimeObject.fond_index.draw;
+
       //if ini_debug then begin
       //  WriteLn(Format('--> idx: %s  m: %s  j: %s', [
       //  Int128ToStr(index), Int128ToStr(m), Int128ToStr(j) ]));
