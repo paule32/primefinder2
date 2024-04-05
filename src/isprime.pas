@@ -191,6 +191,8 @@ var
   vm        : TVideoMode; // fine tuning the tui application
   app_name  : AnsiString; // name of the application (.ini)
   number    : AnsiString;
+  
+  primeList: TStringList; // holds last primes + index
 
 // ----------------------------------------------------------------
 // @brief ctor - construct a TCheckBox
@@ -600,11 +602,13 @@ var
   suche, index, check, i, j, even, m, prime: UInt128;
   lastIndex, lastPrime: UInt128;
   len, b: LongInt;
+  A: String;
 begin
   // -------------------------------------------------------------
   // pre-initinitalize the result of this function:
   // -------------------------------------------------------------
   result := false;
+  index  := 1;
   
   // -------------------------------------------------------------
   // clearify input string with remove the empty whitespaces ...
@@ -706,8 +710,7 @@ begin
   // -------------------------------------------------------------
   // post-initialize used variables ...
   // -------------------------------------------------------------
-  suche := StrToInt128(nst);
-
+  suche     := StrToInt128(nst);
   check     := integer_sqrt(suche);
   index     := 1;
   i         := 2;
@@ -723,61 +726,72 @@ begin
   // into a exception of range checking in context of LongInt and
   // the resulting 64-Bit length ...
   // -------------------------------------------------------------
+  i := 1;
+  A := '';
+  // fill array (string list) with T as true sign ...
   while true do begin
-    if i >= suche then break;
-    j := i * i;
-    even := 1;
-    while j <= suche do begin
-      m := ((even mod i));
-      
-      PrimeObject.fond_index.Text^ := Int128ToStr(index);
-      PrimeObject.fond_index.draw;
-
-      //if ini_debug then begin
-      //  WriteLn(Format('--> idx: %s  m: %s  j: %s', [
-      //  Int128ToStr(index), Int128ToStr(m), Int128ToStr(j) ]));
-      //end;
-      if m = 0 then begin
-        index := index + 1;
-        prime  := j;
-        if j >= suche then begin
-          PrimeObject.fond_index.Text^ := Int128ToStr(index + 1);
-          PrimeObject.fond_index.draw;
-
-          PrimeObject.fond_prime.Text^ := 'okay.';
-          PrimeObject.fond_prime.draw;
-
-          MsgBox.MessageBox(#3 + 'SUCCESS' +
-          #13#3 + 'end of calculation.',
-          nil, mfInformation + mfOkButton);
-          
-          result := true;
-          break;
-        end;
-      end else begin
-        lastIndex := index;
-        lastPrime := prime;
-        if j >= suche then begin
-          PrimeObject.fond_index.Text^ := ' ';
-          PrimeObject.fond_index.draw;
-
-          PrimeObject.fond_prime.Text^ := 'no prime';
-          PrimeObject.fond_prime.draw;
-
-          MsgBox.MessageBox(#3 + 'FAILED' +
-          #13#3 + 'end of calculation.',
-          nil, mfInformation + mfOkButton);
-          
-          result := false;
-          break;
-        end;
+    if i > suche then break;
+    A := A + 'T';
+    i := i + 1;
+  end;
+  
+  // -------------------------------------------------------
+  // calculate prime, and extend A by setting F, if no prime
+  // begining with prime 2 ...
+  // -------------------------------------------------------
+  i := 2;
+  while true do begin
+    if A[StrToInt(Int128ToStr(i))] = 'T' then begin
+      j := i * i;
+      while j <= suche do begin
+        A[StrToInt(Int128ToStr(j))] := 'F';
+        j := j + i;
+        if j > suche then break;
       end;
-      j := j + 1;
-      even := even + 1;
     end;
     if i >= check then break;
-    if j >= suche then break;
+    index := index + 1;
     i := i + 1;
+  end;
+  
+  // -------------------------------------------------------
+  // now, calculate indices of T ...
+  // -------------------------------------------------------
+  m := 0;
+  i := 1;
+  while true do begin
+    if A[StrToInt(Int128ToStr(i))] = 'T' then begin
+      m := m + 1;
+    end;
+    if i >= Length(A) then begin
+      m := m - 1;
+      break;
+    end else begin
+      i := i + 1;
+    end;
+  end;
+
+  // -------------------------------------------------------
+  // if end of string contains 'F', then the input value is
+  // not prime; else by 'T': input is prime, and the index
+  // will be display:
+  // -------------------------------------------------------
+  if A[Length(A)] = 'F' then begin
+    PrimeObject.fond_index.Text^ := ' ';
+    PrimeObject.fond_prime.Text^ := ' ';
+    
+    MsgBox.MessageBox(#3 + 'FAILED'    +
+    #13#3  + 'end of calculation.'     ,
+    nil, mfInformation + mfOkButton);
+  end else begin
+    PrimeObject.fond_index.Text^ := Int128ToStr(m);
+    PrimeObject.fond_index.draw;
+    PrimeObject.fond_index.Text^ := nst;
+
+    MsgBox.MessageBox(#3 + 'SUCCESS'   +
+    #13#3  + 'end of calculation.'     +
+    #13#13 + 'Index: ' + Int128ToStr(m),
+    nil, mfInformation + mfOkButton);
   end;
 end;
 
@@ -846,6 +860,9 @@ begin
       // -----------------------------------------------------------
       SetVideoMode(vm);
       SetCursorPos(0, 0);
+      
+      primeList := TStringList.Create;
+      primeList.Clear;
         
       // -----------------------------------------------------------
       // start tge application text user interface (tui) ...
@@ -916,6 +933,10 @@ begin
     // ---------------------------------------------------------------
     PrimeIni.Free;
     PrimeIni := nil;
+    
+    primeList.Clear;
+    primeList.Free;
+    primeList := nil;
     
     // ---------------------------------------------------------------
     // reset system settings to the startup/defualt values ...
