@@ -141,6 +141,12 @@ type
   public
     PrimeDialog: TPrimeDialog;
     
+    PrimeStartTime: TDateTime;
+    PrimeEndTime  : TDateTime;
+    
+    PrimeTimeText: PStaticText;
+    PrimeTime    : TDateTime;
+    
     line_start : PPrimeInputLine;
     line_end   : PPrimeInputLine;
     
@@ -342,6 +348,7 @@ begin
       case Event.Command of
         // lets rumbble :-()
         cmStarteSearch: begin
+          PrimeObject.PrimeStartTime := Now;
           check_prime(PrimeObject.line_start^.data^);
           ClearEvent(Event);
         end;
@@ -388,7 +395,11 @@ begin
   Insert(PrimeObject.forceStart);
   
   // button: start
-  R.Assign(48,8, 69,10); Insert(New(PButton, Init(R, 'S T A R T', cmStarteSearch, bfNormal)));
+  R.Assign(48,8,  69,10); Insert(New(PButton, Init(R, 'S T A R T', cmStarteSearch, bfNormal)));
+  
+  R.Assign(48,10, 69,11);
+  PrimeObject.PrimeTimeText := New(PStaticText, Init(R, 'EsTime: 00:00:00'));
+  insert(PrimeObject.PrimeTimeText);
 
   // text: index
   R.Assign(2,10, 42,11); Insert(New(PStaticText, Init(R, 'Index:')));
@@ -743,8 +754,22 @@ begin
   while true do begin
     if A[StrToInt(Int128ToStr(i))] = 'T' then begin
       j := i * i;
+      PrimeObject.PrimeEndTime := Now;
+      
+      PrimeObject.PrimeTimeText.Text^ := Format(
+      'ExTime: %s', [FormatDateTime('HH:MM:SS:ZZZ',
+      PrimeObject.PrimeStartTime - PrimeObject.PrimeEndTime)]);
+      PrimeObject.PrimeTimeText.draw();
+      
       while j <= suche do begin
+        PrimeObject.PrimeEndTime := Now;
         A[StrToInt(Int128ToStr(j))] := 'F';
+        
+        PrimeObject.PrimeTimeText.Text^ := Format(
+        'ExTime: %s', [FormatDateTime('HH:MM:SS:ZZZ',
+        PrimeObject.PrimeStartTime - PrimeObject.PrimeEndTime)]);
+        PrimeObject.PrimeTimeText.draw();
+        
         j := j + i;
         if j > suche then break;
       end;
@@ -760,6 +785,13 @@ begin
   m := 0;
   i := 1;
   while true do begin
+    PrimeObject.PrimeEndTime := Now;
+      
+    PrimeObject.PrimeTimeText.Text^ := Format(
+    'ExTime: %s', [FormatDateTime('HH:MM:SS:ZZZ',
+    PrimeObject.PrimeStartTime - PrimeObject.PrimeEndTime)]);
+    PrimeObject.PrimeTimeText.draw();
+      
     if A[StrToInt(Int128ToStr(i))] = 'T' then begin
       m := m + 1;
     end;
@@ -781,12 +813,12 @@ begin
     PrimeObject.fond_prime.Text^ := ' ';
     
     MsgBox.MessageBox(#3 + 'FAILED'    +
-    #13#3  + 'end of calculation.'     ,
+    #13#3  + 'end of calculation.'     ,    
     nil, mfInformation + mfOkButton);
   end else begin
     PrimeObject.fond_index.Text^ := Int128ToStr(m);
     PrimeObject.fond_index.draw;
-    PrimeObject.fond_index.Text^ := nst;
+    PrimeObject.fond_prime.Text^ := 'is prime';
 
     MsgBox.MessageBox(#3 + 'SUCCESS'   +
     #13#3  + 'end of calculation.'     +
