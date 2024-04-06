@@ -168,7 +168,8 @@ type
 // ----------------------------------------------------------------
 // global forwarded members for later use ...
 // ----------------------------------------------------------------
-function check_prime(nst: String): Boolean; forward;
+function check_prime_only(nst: String): Boolean; forward;
+function check_prime     (nst: String): Boolean; forward;
 
 // ----------------------------------------------------------------
 // application command ID's ...
@@ -349,7 +350,22 @@ begin
         // lets rumbble :-()
         cmStarteSearch: begin
           PrimeObject.PrimeStartTime := Now;
-          check_prime(PrimeObject.line_start^.data^);
+          
+          if PrimeObject.indexPrime^.Value = 0 then begin
+            check_prime(PrimeObject.line_start^.data^);
+          end else begin
+            if check_prime_only(PrimeObject.line_start^.data^) then begin
+              ClearEvent(Event);
+              MsgBox.MessageBox(#3 + 'SUCCESS'+ #13#3 + 'is prime', nil,
+              mfInformation + mfOkButton);
+              exit;
+            end else begin
+              ClearEvent(Event);
+              MsgBox.MessageBox(#3 + 'FAILED' + #13#3 + 'is not prime',
+              nil, mfInformation + mfOkButton);
+              exit;
+            end;
+          end;
           ClearEvent(Event);
         end;
         cmStopAndSave : begin doStopAndSave; ClearEvent(Event); end;
@@ -388,8 +404,8 @@ begin
   R.Assign( 2,7, 23, 8); Insert(New(PStaticText, Init(R, 'Parameter 1:')));
   R.Assign(26,7, 47, 8); Insert(New(PStaticText, Init(R, 'Parameter 2:')));
 
-  R.Assign( 2,8, 23, 9); PrimeObject.indexPrime := New(PPrimeCheckBox, Init(R, '~o~nly one check' ));
-  R.Assign(26,8, 45, 9); PrimeObject.forceStart := New(PPrimeCheckBox, Init(R, '~f~orce start'    ));
+  R.Assign( 2,8, 23, 9); PrimeObject.indexPrime := New(PPrimeCheckBox, Init(R, '~o~nly prime check' ));
+  R.Assign(26,8, 45, 9); PrimeObject.forceStart := New(PPrimeCheckBox, Init(R, '~f~orce start'      ));
   //
   Insert(PrimeObject.indexPrime);
   Insert(PrimeObject.forceStart);
@@ -825,6 +841,32 @@ begin
     #13#13 + 'Index: ' + Int128ToStr(m),
     nil, mfInformation + mfOkButton);
   end;
+end;
+
+function check_prime_only(nst: String): Boolean;
+var
+  i, suche: UInt128;
+begin
+  result := false;
+  suche := StrToInt128(nst);
+  if ((suche = 2) or (suche = 3)) then begin
+    result := true;
+    exit;
+  end;
+  if ((suche <= 1) or ((suche mod 2) = 0) or ((suche mod 3) = 0)) then begin
+    result := false;
+    exit;
+  end;
+  i := 5;
+  while (i * i <= suche) do begin
+    if ((suche mod i) = 0) or ((suche mod (i + 2)) = 0) then begin
+      result := false;
+      exit;
+    end else begin
+      i := i + 6;
+    end;
+  end;
+  result := true;
 end;
 
 // ----------------------------------------------------------------
