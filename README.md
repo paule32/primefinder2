@@ -14,3 +14,7 @@ Alpha Front-Screen 2.2 - the application in Action:
 
 Alpha Front-Screen 2.3 - the application in Action:
 ![Preview](img/screen003.png)
+
+
+Alpha Front-Screen 2.4 - the application in Action:
+![Preview](img/screen004.png)

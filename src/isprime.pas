@@ -70,8 +70,8 @@ var
   ini_color: Boolean =  true;  // def. con in color mode?
   ini_debug: Boolean = false;  // def. debug mode
   
-  ini_name : AnsiString;       // the name of the .ini file
-  ini_file : TextFile;         // ini file handle
+  ini_name, S : AnsiString;    // the name of the .ini file
+  ini_file    : TextFile;      // ini file handle
 
 // ----------------------------------------------------------------
 // the object classes for the prime application ...
@@ -144,8 +144,18 @@ type
     PrimeStartTime: TDateTime;
     PrimeEndTime  : TDateTime;
     
-    PrimeTimeText: PStaticText;
-    PrimeTime    : TDateTime;
+    PrimeTimePass1 : PStaticText;
+    PrimeTimePass2 : PStaticText;
+    PrimeTimePass3 : PStaticText;
+    PrimeTimePass4 : PStaticText;
+    //
+    PrimeTime1     : TDateTime;
+    PrimeTime2     : TDateTime;
+    PrimeTime3     : TDateTime;
+    PrimeTime4     : TDateTime;
+    //
+    indexPrev      : PCheckBoxes;
+    indexNext      : PCheckBoxes;
     
     line_start : PPrimeInputLine;
     line_end   : PPrimeInputLine;
@@ -196,7 +206,6 @@ var
   
 var
   vm        : TVideoMode; // fine tuning the tui application
-  app_name  : AnsiString; // name of the application (.ini)
   number    : AnsiString;
   
   primeList: TStringList; // holds last primes + index
@@ -255,62 +264,63 @@ var
 begin
   fmt := '%4d / 250';
   if (Event.What = evKeyDown) then begin
-    if event.keycode = kbBack then begin
-      if internal_id = 1 then begin
-        dec(PrimeObject.cont_start);
-        if PrimeObject.cont_start < 1   then
-          PrimeObject.cont_start := 1;  Delete(
+    with PrimeObject do begin
+      if event.keycode = kbBack then begin
+        if internal_id = 1 then begin
+          dec(cont_start);
+          if cont_start < 1   then
+          cont_start := 1;  Delete(
+          line_start^.data^,  Length(
+          line_start^.data^), 1);
           
-        PrimeObject.line_start^.data^,  Length(
-        PrimeObject.line_start^.data^), 1);
-          
-        PrimeObject.labl_start^.Text^ := Format(fmt, [
-        PrimeObject.cont_start-1]);
-        PrimeObject.labl_start.draw;
-      end else
-      if internal_id = 2 then begin
-        dec(PrimeObject.cont_end);
-        if PrimeObject.cont_end < 1   then
-          PrimeObject.cont_end := 1;  Delete(
-          
-        PrimeObject.line_end^.data^,  Length(
-        PrimeObject.line_end^.data^), 1);
-          
-        PrimeObject.labl_end^.Text^ := Format(fmt, [
-        PrimeObject.cont_end-1]);
-        PrimeObject.labl_end.draw;
-      end;
-    end else
-    if ((event.charcode >= '0') and (event.charcode <= '9')) then begin
-      if internal_id = 1 then begin
-        if PrimeObject.cont_start >= 250 then begin
-          PrimeObject.cont_start := 250;
-          ClearEvent(event);
-          exit;
+          labl_start^.Text^ := Format(fmt, [
+          cont_start-1]);
+          labl_start.draw;
         end else
-        if Length(PrimeObject.labl_start^.Text^) < 250 then begin
-          PrimeObject.labl_start^.Text^ := Format(fmt, [
-          Length(PrimeObject.line_start^.data^)+1]);
-          PrimeObject.labl_start.draw;
-          inc(PrimeObject.cont_start);
+        if internal_id = 2 then begin
+          dec(cont_end);
+          if cont_end < 1   then
+          cont_end := 1;  Delete(
+          
+          line_end^.data^,  Length(
+          line_end^.data^), 1);
+          
+          labl_end^.Text^ := Format(fmt, [
+          cont_end-1]);
+          labl_end.draw;
         end;
       end else
-      if internal_id = 2 then begin
-        if PrimeObject.cont_end >= 250 then begin
-          PrimeObject.cont_end := 250;
-          ClearEvent(event);
-          exit;
+      if ((event.charcode >= '0') and (event.charcode <= '9')) then begin
+        if internal_id = 1 then begin
+          if cont_start >= 250 then begin
+            cont_start := 250;
+            ClearEvent(event);
+            exit;
+          end else
+          if Length(labl_start^.Text^) < 250 then begin
+            labl_start^.Text^ := Format(fmt, [
+            Length(line_start^.data^)+1]);
+            labl_start.draw;
+            inc(cont_start);
+          end;
         end else
-        if Length(PrimeObject.labl_end^.Text^) < 251 then begin
-          PrimeObject.labl_end^.Text^ := Format(fmt, [
-          Length(PrimeObject.line_end^.data^)+1]);
-          PrimeObject.labl_end.draw;
-          inc(PrimeObject.cont_end);
+        if internal_id = 2 then begin
+          if cont_end >= 250 then begin
+            cont_end := 250;
+            ClearEvent(event);
+            exit;
+          end else
+          if Length(labl_end^.Text^) < 251 then begin
+            labl_end^.Text^ := Format(fmt, [
+            Length(line_end^.data^)+1]);
+            labl_end.draw;
+            inc(cont_end);
+          end;
         end;
+      end else begin
+        ClearEvent(event);
+        exit;
       end;
-    end else begin
-      ClearEvent(event);
-      exit;
     end;
   end;
   inherited HandleEvent(Event);
@@ -342,31 +352,43 @@ begin
 end;
 
 procedure TPrimeDialog.HandleEvent(var Event: TEvent);
+var
+  result: Boolean;
 begin
+  result := false;
   inherited HandleEvent(Event);
+  
   case Event.What of
     evCommand: begin
       case Event.Command of
         // lets rumbble :-()
         cmStarteSearch: begin
-          PrimeObject.PrimeStartTime := Now;
-          
-          if PrimeObject.indexPrime^.Value = 0 then begin
-            check_prime(PrimeObject.line_start^.data^);
-          end else begin
-            if check_prime_only(PrimeObject.line_start^.data^) then begin
-              ClearEvent(Event);
-              MsgBox.MessageBox(#3 + 'SUCCESS'+ #13#3 + 'is prime', nil,
-              mfInformation + mfOkButton);
-              exit;
-            end else begin
-              ClearEvent(Event);
-              MsgBox.MessageBox(#3 + 'FAILED' + #13#3 + 'is not prime',
-              nil, mfInformation + mfOkButton);
-              exit;
+          with PrimeObject do begin
+            PrimeStartTime := Now;
+            
+            // before we start calculation, reset the display values ...
+            PrimeTimePass1.Text^ := 'Pass 1:  00:00:00:000'; PrimeTimePass1.draw();
+            PrimeTimePass2.Text^ := 'Pass 2:  00:00:00:000'; PrimeTimePass2.draw();
+            PrimeTimePass3.Text^ := 'Pass 3:  00:00:00:000'; PrimeTimePass3.draw();
+            PrimeTimePass4.Text^ := 'Total :  00:00:00:000'; PrimeTimePass4.draw();
+            
+            fond_index.Text^ := ' ';
+            fond_prime.Text^ := ' ';
+            //
+            fond_index.draw();
+            fond_prime.draw();
+            
+            if indexPrime^.Value = 0 then begin
+              // check prime with index
+              result := check_prime(String(line_start^.data^));
+            end else
+            if indexPrime^.Value = 1 then begin
+              // check prime without index calc.
+              result := check_prime_only(line_start^.data^);
             end;
           end;
           ClearEvent(Event);
+          exit;
         end;
         cmStopAndSave : begin doStopAndSave; ClearEvent(Event); end;
         cmStopAndLoad : begin doStopAndLoad; ClearEvent(Event); end;
@@ -375,65 +397,88 @@ begin
   end;
 end;
 
+// ----------------------------------------------------------------
+// standard prime dialog constructor ...
+// ----------------------------------------------------------------
 constructor TPrimeDialog.Init;
 var
   R: Objects.TRect;
 begin
-  R.Assign(0,0,72,16);
-  R.Move(4,3);
+  R.Assign(0,0,72,19);
+  R.Move(4,2);
   inherited Init(R, 'Prime finder Dialog');
   
-  // text 1
-  R.Assign(2,1, 43,2); Insert(New(PStaticText, Init(R, 'Start Prime:')));
-  R.Assign(2,4, 43,5); Insert(New(PStaticText, Init(R, 'End Prime:')));
+  with PrimeObject do begin
+    // text 1
+    R.Assign(2,1, 43,2); Insert(New(PStaticText, Init(R, 'Start Prime:')));
+    R.Assign(2,4, 43,5); Insert(New(PStaticText, Init(R, 'End Prime:')));
 
-  // input line: prime start
-  R.Assign(2,2, 55, 3);  PrimeObject.line_start := New(PPrimeInputLine, Init(R, 250));
-  R.Assign(2,5, 55, 6);  PrimeObject.line_end   := New(PPrimeInputLine, Init(R, 250));
-  //
-  insert(PrimeObject.line_start);
-  insert(PrimeObject.line_end  );
-  //
-  R.Assign(58,2, 72, 3); PrimeObject.labl_start := New(PPrimeInputLineCount, Init(R));
-  R.Assign(58,5, 72, 6); PrimeObject.labl_end   := New(PPrimeInputLineCount, Init(R));
-  //
-  insert(PrimeObject.labl_start);
-  insert(PrimeObject.labl_end  );
+    // input line: prime start
+    R.Assign(2,2, 55, 3);  line_start := New(PPrimeInputLine, Init(R, 250));
+    R.Assign(2,5, 55, 6);  line_end   := New(PPrimeInputLine, Init(R, 250));
+    //
+    insert(line_start);
+    insert(line_end  );
+    //
+    R.Assign(58,2, 72, 3); labl_start := New(PPrimeInputLineCount, Init(R));
+    R.Assign(58,5, 72, 6); labl_end   := New(PPrimeInputLineCount, Init(R));
+    //
+    insert(PrimeObject.labl_start);
+    insert(PrimeObject.labl_end  );
 
-  // checkbox: parameter
-  R.Assign( 2,7, 23, 8); Insert(New(PStaticText, Init(R, 'Parameter 1:')));
-  R.Assign(26,7, 47, 8); Insert(New(PStaticText, Init(R, 'Parameter 2:')));
+    // checkbox: parameter
+    R.Assign( 2, 7, 23, 8); Insert(New(PStaticText, Init(R, 'Parameter 1:')));
+    R.Assign(26, 7, 47, 8); Insert(New(PStaticText, Init(R, 'Parameter 2:')));
 
-  R.Assign( 2,8, 23, 9); PrimeObject.indexPrime := New(PPrimeCheckBox, Init(R, '~o~nly prime check' ));
-  R.Assign(26,8, 45, 9); PrimeObject.forceStart := New(PPrimeCheckBox, Init(R, '~f~orce start'      ));
-  //
-  Insert(PrimeObject.indexPrime);
-  Insert(PrimeObject.forceStart);
+    R.Assign( 2, 8, 24, 9); indexPrime := New(PPrimeCheckBox, Init(R, '~o~nly prime check' ));
+    //
+    R.Assign(26, 8, 45, 9); forceStart := New(PPrimeCheckBox, Init(R, 'force start' ));
+    R.Assign(26, 9, 45,10); indexPrev  := New(PPrimeCheckBox, Init(R, 'prev index'  ));
+    R.Assign(26,10, 45,11); indexNext  := New(PPrimeCheckBox, Init(R, 'next index'  ));
+    //
+    Insert(indexPrime);
+    Insert(forceStart);
+    //
+    insert(indexPrev);
+    insert(indexNext);
   
-  // button: start
-  R.Assign(48,8,  69,10); Insert(New(PButton, Init(R, 'S T A R T', cmStarteSearch, bfNormal)));
+    // button: start
+    R.Assign(48,8,  69,10); Insert(New(PButton, Init(R, 'S T A R T', cmStarteSearch, bfNormal)));
   
-  R.Assign(48,10, 69,11);
-  PrimeObject.PrimeTimeText := New(PStaticText, Init(R, 'EsTime: 00:00:00'));
-  insert(PrimeObject.PrimeTimeText);
-
-  // text: index
-  R.Assign(2,10, 42,11); Insert(New(PStaticText, Init(R, 'Index:')));
-  R.Assign(2,11, 42,12); Insert(New(PStaticText, Init(R, 'Prime:')));
-
-  // text: prime
-  R.Assign(10,10, 42,11); PrimeObject.fond_index := New(PStaticText, Init(R, ' '));
-  R.Assign(10,11, 42,12); PrimeObject.fond_prime := New(PStaticText, Init(R, ' '));
-  //
-  insert(PrimeObject.fond_index);
-  insert(PrimeObject.fond_prime);
-
-  // buttons
-  R.Assign( 2,13, 24,15); Insert(New(PButton, Init(R, '~C~ancel Search', cmCancelSearch, bfDefault)));
-  R.Assign(26,13, 46,15); Insert(New(PButton, Init(R, '~L~oad Data'    , cmStopAndLoad , bfNormal )));
-  R.Assign(48,13, 69,15); Insert(New(PButton, Init(R, '~S~top and saves', cmStopAndSave, bfNormal )));
+    R.Assign(48,10, 69,11); PrimeTimePass1 := New(PStaticText, Init(R, 'Pass 1:  00:00:00:000'));
+    R.Assign(48,11, 69,12); PrimeTimePass2 := New(PStaticText, Init(R, 'Pass 2:  00:00:00:000'));
+    R.Assign(48,12, 69,13); PrimeTimePass3 := New(PStaticText, Init(R, 'Pass 3:  00:00:00:000'));
+    //
+    insert(PrimeTimePass1);
+    insert(PrimeTimePass2);
+    insert(PrimeTimePass3);
+    //
+    R.Assign(48,13, 69,14); Insert(New(PStaticText, Init(R, '---------------------')));
+    //
+    R.Assign(48,14, 69,15); PrimeTimePass4 := New(PStaticText, Init(R, 'Total :  00:00:00:000'));
+    insert(PrimeTimePass4);
   
-  desktop^.ExecView(@self);
+    // text: index
+    R.Assign(2,10, 25,11); Insert(New(PStaticText, Init(R, 'Index:')));
+    R.Assign(2,11, 25,12); Insert(New(PStaticText, Init(R, 'Prime:')));
+    //
+    R.Assign(2,13, 30,14); Insert(New(PStaticText, Init(R, 'Prev Index:')));
+    R.Assign(2,14, 39,15); Insert(New(PStaticText, Init(R, 'Next Index:')));
+    
+    // text: prime
+    R.Assign(10,10, 25,11); fond_index := New(PStaticText, Init(R, ' '));
+    R.Assign(10,11, 25,12); fond_prime := New(PStaticText, Init(R, ' '));
+    //
+    insert(fond_index);
+    insert(fond_prime);
+
+    // buttons
+    R.Assign( 2,16, 24,18); Insert(New(PButton, Init(R, '~C~ancel Search' , cmCancelSearch, bfDefault)));
+    R.Assign(26,16, 46,18); Insert(New(PButton, Init(R, '~L~oad Data'     , cmStopAndLoad , bfNormal )));
+    R.Assign(48,16, 69,18); Insert(New(PButton, Init(R, '~S~top and saves', cmStopAndSave, bfNormal )));
+  
+    desktop^.ExecView(@self);
+  end;
 end;
 
 // ----------------------------------------------------------------
@@ -626,220 +671,265 @@ end;
 // ----------------------------------------------------------------
 function check_prime(nst: String): Boolean;
 var
-  suche, index, check, i, j, even, m, prime: UInt128;
+  suche, index, check, i, j, m, prime: UInt128;
   lastIndex, lastPrime: UInt128;
   len, b: LongInt;
-  A: String;
+  A: AnsiString;
 begin
   // -------------------------------------------------------------
   // pre-initinitalize the result of this function:
   // -------------------------------------------------------------
   result := false;
   index  := 1;
-  
-  // -------------------------------------------------------------
-  // clearify input string with remove the empty whitespaces ...
-  // -------------------------------------------------------------
-  nst := StringReplace(nst,' ','',[rfReplaceAll]);
-  
-  // -------------------------------------------------------------
-  // sanity checks (not all currently), to improve calc security:
-  // -------------------------------------------------------------
-  if (Pos('-', nst, 1) > 0) or (Pos('+', nst, 1) > 0)
-  or (Pos('*', nst, 1) > 0) or (Pos('/', nst, 1) > 0)
-  or (Pos('%', nst, 1) > 0) or (Pos('$', nst, 1) > 0) or (Length(nst) < 1) then begin
-    MsgBox.MessageBox('the input value is not valid.', nil,
-    mfError + mfOkButton);
-    exit;
-  end;
 
-  // -------------------------------------------------------------
-  // pre-filter "not" primes ...
-  // -------------------------------------------------------------
-  if nst = '0' then begin
-    MsgBox.MessageBox('0: is not prime', nil,
-    mfError + mfOkButton);
-    result := false;
-    exit;
-  end else
-  if nst = '1' then begin
-    MsgBox.MessageBox('1: is not prime', nil,
-    mfError + mfOkButton);
-    result := false;
-    exit;
-  end else
-  if nst = '2' then begin
-    PrimeObject.fond_index.Text^ := '1';
-    PrimeObject.fond_index.draw;
-    
-    PrimeObject.fond_prime.Text^ := '2';
-    PrimeObject.fond_prime.draw;
-    result := true;
-    exit;
-  end else
-  if nst = '3' then begin
-    PrimeObject.fond_index.Text^ := '2';
-    PrimeObject.fond_index.draw;
-    
-    PrimeObject.fond_prime.Text^ := '3';
-    PrimeObject.fond_prime.draw;
-    result := true;
-    exit;
-  end;
+  with PrimeObject do begin  
+    // -------------------------------------------------------------
+    // clearify input string with remove the empty whitespaces ...
+    // -------------------------------------------------------------
+    nst := StringReplace(nst,' ','',[rfReplaceAll]);
   
-  // -------------------------------------------------------------
-  // check if prime have twins, if so, then it is not a prime.
-  // todo: complete check other prime twins ...
-  // -------------------------------------------------------------
-  if Length(nst) > 2 then begin
-    result := true;
-    for b := StrToInt('0') to StrToInt('9') do begin
-      if result = false then begin
-        MsgBox.MessageBox(Format('%s: is no prime, it has twins.',[nst]),
-        nil, mfError + mfOkButton);
-        result := false;
-        exit;
-      end else
-      if check_dummy(nst, b) then result := false;
+    // -------------------------------------------------------------
+    // sanity checks (not all currently), to improve calc security:
+    // -------------------------------------------------------------
+    if (Pos('-', nst, 1) > 0) or (Pos('+', nst, 1) > 0)
+    or (Pos('*', nst, 1) > 0) or (Pos('/', nst, 1) > 0)
+    or (Pos('%', nst, 1) > 0) or (Pos('$', nst, 1) > 0) or (Length(nst) < 1) then begin
+      MsgBox.MessageBox('the input value is not valid.', nil,
+      mfError + mfOkButton);
+      exit;
     end;
-  end;
-  
-  // -------------------------------------------------------------
-  // here, we check if the given prime has a length > 1, and if it
-  // is a prime. So, 23 is prime, result will return true.
-  // -------------------------------------------------------------
-  if (Length(nst) mod 2) = 1 then begin
-    len := 1;
-    if nst = '23' then begin
-      if Pos('23', nst, Length(nst) - len) = 0 then begin
-        PrimeObject.fond_index.Text^ := '9'; // todo !
-        PrimeObject.fond_index.draw;
 
-        PrimeObject.fond_prime.Text^ := '23';
-        PrimeObject.fond_prime.draw;
-        result := true;
-        exit;
-      end else
-      if Pos('23', nst, Length(nst) - len) > 0 then begin
-        while true do begin
-          if len = 0 then exit;
-          len := len - 2;
-          if Pos('23', nst, Length(nst) - len) = 0 then begin
-            MsgBox.MessageBox('number is not prime (23. twins) !',
-            nil, mfError + mfOkButton);
-            exit;
+    // -------------------------------------------------------------
+    // pre-filter "not" primes ...
+    // -------------------------------------------------------------
+    if nst = '0' then begin
+      MsgBox.MessageBox('0: is not prime', nil,
+      mfError + mfOkButton);
+      result := false;
+      exit;
+    end else
+    if nst = '1' then begin
+      MsgBox.MessageBox('1: is not prime', nil,
+      mfError + mfOkButton);
+      result := false;
+      exit;
+    end else
+    if nst = '2' then begin
+      fond_index.Text^ := '1';
+      fond_index.draw;
+    
+      fond_prime.Text^ := '2';
+      fond_prime.draw;
+      result := true;
+      exit;
+    end else
+    if nst = '3' then begin
+      fond_index.Text^ := '2';
+      fond_index.draw;
+    
+      fond_prime.Text^ := '3';
+      fond_prime.draw;
+      result := true;
+      exit;
+    end;
+  
+    // -------------------------------------------------------------
+    // check if prime have twins, if so, then it is not a prime.
+    // todo: complete check other prime twins ...
+    // -------------------------------------------------------------
+    if Length(nst) > 2 then begin
+      result := true;
+      for b := StrToInt('0') to StrToInt('9') do begin
+        if result = false then begin
+          MsgBox.MessageBox(Format('%s: is no prime, it has twins.',[nst]),
+          nil, mfError + mfOkButton);
+          result := false;
+          exit;
+        end else
+        if check_dummy(nst, b) then result := false;
+      end;
+    end;
+  
+    // -------------------------------------------------------------
+    // here, we check if the given prime has a length > 1, and if it
+    // is a prime. So, 23 is prime, result will return true.
+    // -------------------------------------------------------------
+    if (Length(nst) mod 2) = 1 then begin
+      len := 1;
+      if nst = '23' then begin
+        if Pos('23', nst, Length(nst) - len) = 0 then begin
+          fond_index.Text^ := '9'; // todo !
+          fond_index.draw;
+
+          fond_prime.Text^ := '23';
+          fond_prime.draw;
+          result := true;
+          exit;
+        end else
+        if Pos('23', nst, Length(nst) - len) > 0 then begin
+          while true do begin
+            if len = 0 then exit;
+            len := len - 2;
+            if Pos('23', nst, Length(nst) - len) = 0 then begin
+              MsgBox.MessageBox('number is not prime (23. twins) !',
+              nil, mfError + mfOkButton);
+              exit;
+            end;
           end;
         end;
       end;
     end;
-  end;
 
-  // -------------------------------------------------------------
-  // post-initialize used variables ...
-  // -------------------------------------------------------------
-  suche     := StrToInt128(nst);
-  check     := integer_sqrt(suche);
-  index     := 1;
-  i         := 2;
-  j         := 1;
+    // -------------------------------------------------------------
+    // post-initialize used variables ...
+    // -------------------------------------------------------------
+    suche     := StrToInt128(nst);
+    check     := integer_sqrt(suche);
+    index     := 1;
+    i         := 2;
+    j         := 1;
   
-  prime     := 2;
-  lastIndex := 1;
-  lastPrime := 2;
+    prime     := 2;
+    lastIndex := 1;
+    lastPrime := 2;
 
-  // -------------------------------------------------------------
-  // here, we use a while loop, because the for loop of pascal do
-  // not have advantages for big numbers. So, it coukd be result
-  // into a exception of range checking in context of LongInt and
-  // the resulting 64-Bit length ...
-  // -------------------------------------------------------------
-  i := 1;
-  A := '';
-  // fill array (string list) with T as true sign ...
-  while true do begin
-    if i > suche then break;
-    A := A + 'T';
-    i := i + 1;
-  end;
+    // -------------------------------------------------------------
+    // here, we use a while loop, because the for loop of pascal do
+    // not have advantages for big numbers. So, it coukd be result
+    // into a exception of range checking in context of LongInt and
+    // the resulting 64-Bit length ...
+    // -------------------------------------------------------------
+    i := 1;
+    A := '';
+
+    PrimeStartTime := Now;
+    PrimeTimePass1.Text^ := 'Pass 1:  00:00:00:000';
+    PrimeTimePass1.draw();
   
-  // -------------------------------------------------------
-  // calculate prime, and extend A by setting F, if no prime
-  // begining with prime 2 ...
-  // -------------------------------------------------------
-  i := 2;
-  while true do begin
-    if A[StrToInt(Int128ToStr(i))] = 'T' then begin
-      j := i * i;
-      PrimeObject.PrimeEndTime := Now;
+    // fill array (string list) with T as true sign ...
+    while i <= suche do begin
+      A := A + 'T';
+      i := i + 1;
+    
+      PrimeEndTime := Now;
+      PrimeTime1 :=
+      PrimeStartTime - PrimeEndTime;
       
-      PrimeObject.PrimeTimeText.Text^ := Format(
-      'ExTime: %s', [FormatDateTime('HH:MM:SS:ZZZ',
-      PrimeObject.PrimeStartTime - PrimeObject.PrimeEndTime)]);
-      PrimeObject.PrimeTimeText.draw();
+      PrimeTimePass1.Text^ := Format(
+      'Pass 1:  %s', [FormatDateTime('HH:MM:SS:ZZZ',
+      PrimeTime1)]);
+      PrimeTimePass1.draw();
+    end;
+
+    // -------------------------------------------------------
+    // calculate prime, and extend A by setting F, if no prime
+    // begining with prime 2 ...
+    // -------------------------------------------------------
+    PrimeStartTime := Now;
+    PrimeTimePass2.Text^ := 'Pass 2:  00:00:00:000';
+    PrimeTimePass2.draw();
+  
+    i := 2;
+    while true do begin
+      if A[StrToInt(Int128ToStr(i))] = 'T' then begin
+        j := i * i;
+        PrimeEndTime := Now;
+        PrimeTime2 :=
+        PrimeStartTime - PrimeEndTime;
       
-      while j <= suche do begin
-        PrimeObject.PrimeEndTime := Now;
-        A[StrToInt(Int128ToStr(j))] := 'F';
+        PrimeTimePass2.Text^ := Format(
+        'Pass 2:  %s', [FormatDateTime('HH:MM:SS:ZZZ',
+        PrimeTime2)]);
+        PrimeTimePass2.draw();
+      
+        while j <= suche do begin
+          A[StrToInt(Int128ToStr(j))] := 'F';
         
-        PrimeObject.PrimeTimeText.Text^ := Format(
-        'ExTime: %s', [FormatDateTime('HH:MM:SS:ZZZ',
-        PrimeObject.PrimeStartTime - PrimeObject.PrimeEndTime)]);
-        PrimeObject.PrimeTimeText.draw();
+          PrimeEndTime := Now;
+          PrimeTime2 :=
+          PrimeStartTime - PrimeEndTime;
+    
+          PrimeTimePass2.Text^ := Format(
+          'Pass 2:  %s', [FormatDateTime('HH:MM:SS:ZZZ',
+          PrimeTime2)]);
+          PrimeTimePass2.draw();
         
-        j := j + i;
-        if j > suche then break;
+          j := j + i;
+          if j > suche then break;
+        end;
       end;
-    end;
-    if i >= check then break;
-    index := index + 1;
-    i := i + 1;
-  end;
-  
-  // -------------------------------------------------------
-  // now, calculate indices of T ...
-  // -------------------------------------------------------
-  m := 0;
-  i := 1;
-  while true do begin
-    PrimeObject.PrimeEndTime := Now;
-      
-    PrimeObject.PrimeTimeText.Text^ := Format(
-    'ExTime: %s', [FormatDateTime('HH:MM:SS:ZZZ',
-    PrimeObject.PrimeStartTime - PrimeObject.PrimeEndTime)]);
-    PrimeObject.PrimeTimeText.draw();
-      
-    if A[StrToInt(Int128ToStr(i))] = 'T' then begin
-      m := m + 1;
-    end;
-    if i >= Length(A) then begin
-      m := m - 1;
-      break;
-    end else begin
+      if i >= check then break;
+      index := index + 1;
       i := i + 1;
     end;
-  end;
 
-  // -------------------------------------------------------
-  // if end of string contains 'F', then the input value is
-  // not prime; else by 'T': input is prime, and the index
-  // will be display:
-  // -------------------------------------------------------
-  if A[Length(A)] = 'F' then begin
-    PrimeObject.fond_index.Text^ := ' ';
-    PrimeObject.fond_prime.Text^ := ' ';
-    
-    MsgBox.MessageBox(#3 + 'FAILED'    +
-    #13#3  + 'end of calculation.'     ,    
-    nil, mfInformation + mfOkButton);
-  end else begin
-    PrimeObject.fond_index.Text^ := Int128ToStr(m);
-    PrimeObject.fond_index.draw;
-    PrimeObject.fond_prime.Text^ := 'is prime';
+    // -------------------------------------------------------
+    // now, calculate indices of T ...
+    // -------------------------------------------------------
+    m := 0;
+    i := 1;
+  
+    PrimeStartTime := Now;
+    PrimeTimePass3.Text^ := 'Pass 3:  00:00:00:000';
+    PrimeTimePass3.draw();
+  
+    while true do begin
+      PrimeEndTime := Now;
+      PrimeTime3 :=
+      PrimeStartTime - PrimeEndTime;
+        
+      PrimeTimePass3.Text^ := Format(
+      'Pass 3:  %s', [FormatDateTime('HH:MM:SS:ZZZ',
+      PrimeTime3)]);
+      PrimeTimePass3.draw();
+      
+      if A[StrToInt(Int128ToStr(i))] = 'T' then begin
+        m := m + 1;
+      end;
+      if i >= Length(A) then begin
+        m := m - 1;
+        break;
+      end else begin
+        i := i + 1;
+      end;
+    end;
 
-    MsgBox.MessageBox(#3 + 'SUCCESS'   +
-    #13#3  + 'end of calculation.'     +
-    #13#13 + 'Index: ' + Int128ToStr(m),
-    nil, mfInformation + mfOkButton);
+    // -------------------------------------------------------
+    // if end of string contains 'F', then the input value is
+    // not prime; else by 'T': input is prime, and the index
+    // will be display:
+    // -------------------------------------------------------
+    if A[Length(A)] = 'F' then begin
+      fond_index.Text^ := ' ';
+      fond_prime.Text^ := ' ';
+      result := false;
+    end else begin
+      fond_index.Text^ := Int128ToStr(m);
+      fond_index.draw;
+      fond_prime.Text^ := 'is prime';
+      result := true;
+    end;
+
+    PrimeTime4 :=
+    PrimeTime3 +
+    PrimeTime2 +
+    PrimeTime1 ;
+  
+    PrimeTimePass4.Text^ := Format(
+    'Total :  %s', [FormatDateTime('HH:MM:SS:ZZZ',
+    PrimeTime4)]);
+    PrimeTimePass4.draw();
+  
+    if result then begin
+      MsgBox.MessageBox(#3 + 'SUCCESS'   +
+      #13#3  + 'end of calculation.'     +
+      #13#13 + 'Index: ' + Int128ToStr(m),
+      nil, mfInformation + mfOkButton);
+    end else begin
+      MsgBox.MessageBox(#3 + 'FAILED'    +
+      #13#3  + 'end of calculation.'     ,    
+      nil, mfInformation + mfOkButton);
+    end;
   end;
 end;
 
@@ -908,12 +998,15 @@ begin
       // not already set up...
       // ---------------------------------------------------------
       PrimeIni := TIniFile.Create(ini_name);
+      S        := 'common';
       
-      ini_cols  := primeIni.ReadInteger('common', 'cols' ,    80);
-      ini_rows  := primeIni.ReadInteger('common', 'rows' ,    25);
-      ini_iface := primeIni.ReadInteger('common', 'ui'   ,     1);
-      ini_color := primeIni.ReadBool   ('common', 'color',  true);
-      ini_debug := primeIni.ReadBool   ('common', 'debug', false);
+      with primeIni do begin
+        ini_cols  := ReadInteger(S, 'cols' ,    80);
+        ini_rows  := ReadInteger(S, 'rows' ,    25);
+        ini_iface := ReadInteger(S, 'ui'   ,     1);
+        ini_color := ReadBool   (S, 'color',  true);
+        ini_debug := ReadBool   (S, 'debug', false);
+      end;
       
       Randomize;
       InitVideo;
@@ -950,12 +1043,13 @@ begin
       // you on the CODE OF CONDUCT codex - Thank you.
       // -------------------------------------------------------------
       if ini_iface = 0 then begin
-        WriteLn('primefind.exe 1.0 (c) 2024 Jens Kallup - paule32');
-        WriteLn('all rights reserved.');
-        WriteLn;
-        WriteLn('only for education purpose, and non-profit.');
-        WriteLn('commerical use is not allowed !');
-        WriteLn;
+        WriteLn(''
+        + #13 + 'primefind.exe 1.0 (c) 2024 Jens Kallup - paule32'
+        + #13 + 'all rights reserved.'
+        + #13
+        + #13 + 'only for education purpose, and non-profit.'
+        + #13 + 'commerical use is not allowed !'
+        + #13);
       end;
     
       // -------------------------------------------------------------
@@ -996,11 +1090,15 @@ begin
     // ---------------------------------------------------------------
     // save the settings of the applicatiion to the local storeage ...
     // ---------------------------------------------------------------
-    primeIni.WriteInteger('common', 'cols' , ini_cols );
-    primeIni.WriteInteger('common', 'rows' , ini_rows );
-    primeIni.WriteInteger('common', 'ui'   , ini_iface);
-    primeIni.WriteBool   ('common', 'color', ini_color);
-    primeIni.WriteBool   ('common', 'debug', ini_debug);
+    S := 'common';
+    
+    with primeIni do begin
+      WriteInteger(S, 'cols' , ini_cols );
+      WriteInteger(S, 'rows' , ini_rows );
+      WriteInteger(S, 'ui'   , ini_iface);
+      WriteBool   (S, 'color', ini_color);
+      WriteBool   (S, 'debug', ini_debug);
+    end;
 
     // ---------------------------------------------------------------
     // try to free/empty allocated memory ...
